@@ -1,0 +1,7 @@
+__pycache__/
+# runtime state written by the editor
+cache.json
+pins.json
+# local design-tool context
+.impeccable/
+PRODUCT.md

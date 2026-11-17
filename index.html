@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FIFA 19 Live Editor</title>
+<style>
+@font-face { font-family: Bedstead; src: url(/fonts/bedstead-semicondensed.otf) format("opentype"); font-weight: 400; }
+@font-face { font-family: Bedstead; src: url(/fonts/bedstead-boldsemicondensed.otf) format("opentype"); font-weight: 700; }
+
+:root {
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-tt: Bedstead, "Cascadia Mono", Consolas, monospace;
+}
+[data-theme="dark"] {
+  --bg: #050608; --panel: #0a0d14; --panel-2: #10141e; --line: #1e2433; --line-2: #2b3346;
+  --text: #f1f1e8; --dim: #a3a9b6; --faint: #7d8497;
+  --red: #ff5a52; --green: #3ee06e; --yellow: #ffe14a; --cyan: #3ee4ea; --magenta: #ff5cf4; --blue: #1630c9;
+  --key-red: #ff4a42; --key-green: #36d862; --key-yellow: #ffd60a; --key-cyan: #2ad9e2; --on-key: #050608;
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: #efede6; --panel: #fbfaf6; --panel-2: #f3f1ea; --line: #dcd8cc; --line-2: #c8c3b4;
+  --text: #121212; --dim: #4f4f55; --faint: #616168;
+  --red: #c0101b; --green: #0b7a32; --yellow: #7a5c00; --cyan: #006f7a; --magenta: #a1009a; --blue: #1630c9;
+  --key-red: #ff4a42; --key-green: #36d862; --key-yellow: #ffd60a; --key-cyan: #2ad9e2; --on-key: #050608;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font: 14px/1.4 var(--font-ui);
+  display: grid; grid-template-rows: auto auto 1fr; overflow: hidden;
+}
+::selection { background: var(--cyan); color: var(--bg); }
+* { scrollbar-color: var(--line-2) transparent; scrollbar-width: thin; }
+input, select, button { font: inherit; color: inherit; caret-color: var(--cyan); }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+button { cursor: pointer; }
+.tt { font-family: var(--font-tt); font-variant-numeric: tabular-nums; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: square; flex: none; }
+
+/* top bar */
+.top { display: flex; align-items: center; gap: 20px; padding: 0 20px; height: 48px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.brand { font: 700 20px/1 var(--font-tt); color: var(--yellow); white-space: nowrap; }
+.brand b { color: var(--bg); background: var(--yellow); padding: 2px 6px; margin-left: 6px; font-weight: 700; }
+.state { display: flex; align-items: center; gap: 8px; color: var(--dim); min-width: 0; }
+.state .dot { width: 10px; height: 10px; background: var(--faint); flex: none; }
+.state[data-s="ready"] .dot { background: var(--green); }
+.state[data-s="scan"] .dot { background: var(--yellow); }
+.state[data-s="nogame"] .dot, .state[data-s="error"] .dot { background: var(--red); }
+.state span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.career { margin-left: auto; display: flex; gap: 8px; align-items: baseline; white-space: nowrap; color: var(--dim); min-width: 0; }
+.career strong, .career > span:not(.tt) { color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.career strong { font-weight: 600; }
+.career > span:not(.tt):not(.lbl) { color: var(--dim); }
+.career .tt { color: var(--cyan); font-size: 20px; }
+.tbtn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; background: transparent; border: 1px solid var(--line-2); color: var(--text); white-space: nowrap; }
+.tbtn:hover { border-color: var(--cyan); color: var(--cyan); }
+.tbtn:disabled { opacity: .45; cursor: default; border-color: var(--line-2); color: var(--text); }
+
+/* preset keys */
+.keys { display: flex; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line); align-items: center; }
+.key { height: 40px; padding: 0 18px; border: 2px solid transparent; color: var(--on-key); font: 700 20px/1 var(--font-tt); white-space: nowrap; }
+.key.red { background: var(--key-red); } .key.green { background: var(--key-green); }
+.key.yellow { background: var(--key-yellow); } .key.cyan { background: var(--key-cyan); }
+.key:hover { filter: brightness(1.12); }
+.key[aria-pressed="true"] { background: var(--bg); }
+.key.red[aria-pressed="true"] { color: var(--key-red); border-color: var(--key-red); }
+.key.green[aria-pressed="true"] { color: var(--key-green); border-color: var(--key-green); }
+.key.yellow[aria-pressed="true"] { color: var(--key-yellow); border-color: var(--key-yellow); }
+.key.cyan[aria-pressed="true"] { color: var(--key-cyan); border-color: var(--key-cyan); }
+[data-theme="light"] .key.yellow[aria-pressed="true"] { color: #8a6a00; border-color: #c9a400; }
+[data-theme="light"] .key.green[aria-pressed="true"] { color: #0b7a32; }
+[data-theme="light"] .key.cyan[aria-pressed="true"] { color: #006f7a; }
+[data-theme="light"] .key.red[aria-pressed="true"] { color: #c0101b; }
+.key:disabled { opacity: .35; cursor: default; filter: none; }
+.keys .hint { margin-left: 20px; color: var(--faint); font-size: 13px; }
+.tswitch { margin-left: auto; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 4px 0 14px; background: transparent; border: 2px solid var(--line-2); color: var(--text); font: 700 20px/1 var(--font-tt); white-space: nowrap; }
+.tswitch b { padding: 7px 10px; background: var(--line); color: var(--dim); font-weight: 700; }
+.tswitch[aria-checked="true"] { border-color: var(--key-green); }
+.tswitch[aria-checked="true"] b { background: var(--key-green); color: var(--on-key); }
+.tswitch:hover:not(:disabled) { border-color: var(--cyan); }
+.tswitch:disabled { opacity: .45; cursor: default; }
+.keys kbd { font: 700 13px var(--font-ui); border: 1px solid var(--line-2); padding: 0 5px; color: var(--dim); }
+
+/* main split */
+main { display: grid; grid-template-columns: minmax(660px, 46%) 1fr; min-height: 0; }
+.list { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; border-right: 1px solid var(--line); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 12px 20px; align-items: end; border-bottom: 1px solid var(--line); }
+.field { display: grid; gap: 4px; }
+.field > span { font-size: 12px; color: var(--dim); }
+.inp { height: 34px; padding: 0 10px; background: var(--panel); border: 1px solid var(--line-2); min-width: 0; }
+.inp:hover { border-color: var(--faint); }
+.inp:focus { border-color: var(--cyan); outline: none; }
+.search { position: relative; flex: 1 1 220px; }
+.search .inp { width: 100%; padding-left: 34px; }
+.search svg { position: absolute; left: 10px; bottom: 9px; color: var(--dim); }
+.w-club { flex: 1 1 200px; } .w-club .inp { width: 100%; }
+.w-num .inp { width: 72px; } .w-pos .inp { width: 110px; }
+.clear { height: 34px; background: none; border: 0; color: var(--dim); padding: 0 4px; text-decoration: underline; text-underline-offset: 3px; }
+.clear:hover { color: var(--cyan); }
+
+.tablewrap { overflow: auto; min-height: 0; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+thead th { position: sticky; top: 0; z-index: 1; background: var(--panel-2); border-bottom: 1px solid var(--line-2); text-align: left; font-weight: 600; padding: 0; }
+th button { width: 100%; height: 34px; padding: 0 10px; display: flex; align-items: center; gap: 4px; background: none; border: 0; color: var(--dim); font-size: 12px; text-align: inherit; }
+th.n button { justify-content: flex-end; }
+th button:hover { color: var(--text); }
+th[aria-sort] button { color: var(--cyan); }
+th .caret { width: 10px; height: 10px; fill: currentColor; stroke: none; visibility: hidden; }
+th[aria-sort] .caret { visibility: visible; }
+th[aria-sort="ascending"] .caret { transform: rotate(180deg); }
+td { height: 32px; padding: 0 10px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.n { text-align: right; font: 20px/1 var(--font-tt); font-variant-numeric: tabular-nums; }
+td.id { color: var(--faint); font-size: 20px; }
+td.club { color: var(--dim); }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--panel-2); }
+tbody tr[aria-selected="true"] td { background: var(--panel-2); box-shadow: inset 0 1px 0 var(--cyan), inset 0 -1px 0 var(--cyan); }
+tbody tr[aria-selected="true"] td:first-child { box-shadow: inset 4px 0 0 var(--cyan), inset 0 1px 0 var(--cyan), inset 0 -1px 0 var(--cyan); }
+.name { font-weight: 600; }
+.v-lo { color: var(--red); } .v-mid { color: var(--yellow); } .v-hi { color: var(--green); }
+.c-exp { color: var(--red); }
+.edited { color: var(--magenta) !important; }
+.listfoot { padding: 8px 20px; border-top: 1px solid var(--line); color: var(--dim); font-size: 13px; display: flex; gap: 16px; }
+.listfoot .tt { color: var(--text); font-size: 20px; line-height: 1; }
+.empty { padding: 48px 20px; color: var(--dim); max-width: 60ch; }
+.empty h3 { margin: 0 0 8px; font: 700 20px/1.2 var(--font-tt); color: var(--yellow); }
+.empty p { margin: 0 0 8px; }
+
+/* player panel */
+.panel { overflow: auto; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.ph { padding: 20px 28px 16px; border-bottom: 1px solid var(--line); }
+.band { background: var(--blue); height: 64px; padding: 8px 14px 0; margin: 0 0 12px; overflow: hidden; }
+.band h2 { margin: 0; font: 700 24px/24px var(--font-tt); color: #ffe14a; transform: scaleY(2); transform-origin: 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--dim); margin: 0 0 16px; }
+.meta b { color: var(--text); font-weight: 600; }
+.meta .tt { font-size: 20px; line-height: 1; color: var(--faint); }
+.headline { display: flex; gap: 32px; align-items: end; }
+.ovrnote { margin: 12px 0 0; }
+.big { display: grid; gap: 2px; }
+.big span { font-size: 12px; color: var(--dim); }
+.big input { width: 96px; height: 52px; font: 700 40px/1 var(--font-tt); padding: 0 8px; background: var(--panel); border: 1px solid var(--line-2); }
+.big .agebox { font: 700 40px/52px var(--font-tt); color: var(--text); }
+.jump { position: sticky; top: 0; z-index: 2; display: flex; gap: 2px; padding: 8px 28px; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.jump a { color: var(--dim); text-decoration: none; padding: 4px 8px; white-space: nowrap; font-size: 13px; }
+.jump a:hover { color: var(--cyan); }
+.sections { padding: 8px 28px 120px; }
+.sec { padding: 20px 0 8px; scroll-margin-top: 48px; }
+.sec > h3 { margin: 0 0 12px; font: 700 20px/1 var(--font-tt); color: var(--yellow); display: flex; gap: 12px; align-items: baseline; }
+.sec > h3 small { font: 400 13px var(--font-ui); color: var(--faint); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 4px 32px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(400px, 100%), 1fr)); gap: 4px 32px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) 56px 88px; align-items: center; gap: 12px; min-height: 36px; border-bottom: 1px solid var(--line); }
+.row.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 196px); }
+.row > span:first-child { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.unknown > span:first-child { font-style: italic; color: var(--faint); }
+.row input, .row select { height: 30px; width: 100%; background: transparent; border: 1px solid transparent; padding: 0 6px; }
+.row input[type=number] { font: 20px/1 var(--font-tt); text-align: right; font-variant-numeric: tabular-nums; }
+.row input:hover, .row select:hover { border-color: var(--line-2); }
+.row input:focus, .row select:focus { border-color: var(--cyan); background: var(--panel); outline: none; }
+.row select { background: var(--panel); border-color: var(--line); }
+.row select option { background: var(--panel); color: var(--text); }
+input[type=number]::-webkit-inner-spin-button { display: none; }
+.bar { height: 8px; background: var(--line); position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: currentColor; }
+.pending input, .pending select, input.pending, select.pending { border-color: var(--cyan) !important; color: var(--cyan); }
+.row.edited input, .row.edited select, input.edited { color: var(--magenta); }
+.traits { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 24px; }
+.chk { display: flex; gap: 10px; align-items: center; min-height: 32px; border-bottom: 1px solid var(--line); color: var(--dim); }
+.chk input { width: 16px; height: 16px; accent-color: var(--cyan); margin: 0; }
+.chk:has(input:checked) { color: var(--text); }
+.bits { display: flex; flex-wrap: wrap; gap: 4px; }
+.bits label { position: relative; }
+.bits input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.bits span { display: grid; place-items: center; width: 40px; height: 32px; border: 1px solid var(--line-2); font: 20px/1 var(--font-tt); color: var(--faint); }
+.bits input:checked + span { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.bits input:focus-visible + span { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.sub { margin: 16px 0 8px; font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.sub small { color: var(--faint); font-weight: 400; }
+.note { color: var(--faint); font-size: 13px; margin: 0 0 10px; max-width: 72ch; }
+.log { display: grid; gap: 0; }
+.log div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 16px; align-items: center; min-height: 36px; border-bottom: 1px solid var(--line); }
+.log .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log .ch { font: 20px/1 var(--font-tt); white-space: nowrap; }
+.log .ch s { color: var(--faint); }
+.log .ch b { color: var(--magenta); font-weight: 400; }
+.log .undone .ch b { color: var(--faint); text-decoration: line-through; }
+.log .stamp { font: 700 13px var(--font-tt); color: var(--red); border: 1px solid var(--red); padding: 2px 6px; }
+.linkbtn { background: none; border: 0; color: var(--cyan); padding: 4px 0; text-decoration: underline; text-underline-offset: 3px; }
+
+/* pending bar */
+.commit { position: sticky; bottom: 0; margin-top: auto; display: flex; gap: 12px; align-items: center; padding: 12px 28px; background: var(--panel-2); border-top: 2px solid var(--cyan); }
+.commit[hidden] { display: none; }
+.commit .count { font: 700 20px/1 var(--font-tt); color: var(--cyan); }
+.commit .msg { color: var(--dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commit .msg.err { color: var(--red); }
+.primary { height: 36px; padding: 0 16px; background: var(--key-cyan); color: var(--on-key); border: 0; font-weight: 700; }
+.primary:hover { filter: brightness(1.1); }
+.primary:disabled { opacity: .5; cursor: default; }
+.ghost { height: 36px; padding: 0 14px; background: none; border: 1px solid var(--line-2); }
+.ghost:hover { border-color: var(--text); }
+.toast { position: fixed; left: 20px; bottom: 20px; max-width: 520px; padding: 12px 16px; background: var(--panel-2); border: 1px solid var(--red); color: var(--text); z-index: 5; }
+.toast[hidden] { display: none; }
+.toast.info { border-color: var(--cyan); }
+
+.list[hidden] { display: none; }
+/* modes: players / teams */
+.modes { display: flex; border: 1px solid var(--line-2); }
+.modes button { height: 30px; padding: 0 12px; background: none; border: 0; color: var(--dim); font: 700 16px/1 var(--font-tt); }
+.modes button:hover { color: var(--text); }
+.modes button[aria-pressed="true"] { background: var(--yellow); color: var(--bg); }
+[data-theme="light"] .modes button[aria-pressed="true"] { background: var(--key-yellow); color: var(--on-key); }
+body[data-mode="players"] .tkey, body[data-mode="teams"] .key:not(.tkey), body[data-mode="youth"] .key { display: none; }
+.filters[hidden] { display: none; }
+#reveal, #exact { margin-left: 0; }
+#youthForm .tswitch { height: 34px; font-size: 16px; }
+.scouts { display: grid; gap: 8px; margin-top: 16px; }
+.scouts .row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: end; }
+.scouts .row > span { color: var(--text); font-weight: 600; padding-bottom: 8px; }
+.mission { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--dim); }
+.mission b { color: var(--cyan); font-weight: 400; font-size: 18px; }
+.listfoot .act { margin-left: auto; }
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px 32px; }
+.swatch { display: flex; align-items: center; gap: 12px; min-height: 40px; border-bottom: 1px solid var(--line); color: var(--dim); }
+.swatch input { width: 56px; height: 30px; padding: 0; border: 1px solid var(--line-2); background: none; cursor: pointer; }
+.swatch .tt { color: var(--text); font-size: 16px; margin-left: auto; }
+.swatch.pending input { border-color: var(--cyan); }
+
+@media (max-width: 1500px) {
+  col.c-id { width: 0 !important; }
+  td.id, th.id { padding: 0; font-size: 0; }
+  th.id button { display: none; }
+}
+@media (max-width: 1100px) {
+  body { overflow: auto; display: block; }
+  main { display: block; }
+  .list { border-right: 0; height: 60vh; }
+  .panel { overflow: visible; border-top: 1px solid var(--line); }
+  .career .lbl { display: none; }
+}
+@media (max-width: 640px) {
+  .top { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px 12px; }
+  .career { margin-left: 0; width: 100%; }
+  .keys { display: grid; grid-template-columns: 1fr 1fr; padding: 12px 16px; }
+  .key { font-size: 16px; padding: 0 8px; }
+  .keys .hint { display: none; }
+  .tswitch { grid-column: 1 / -1; margin-left: 0; justify-content: space-between; font-size: 16px; }
+  .filters, .ph, .sections, .jump { padding-left: 16px; padding-right: 16px; }
+  col.c-id, col.c-club { width: 0 !important; }
+  td.id, th.id, td.club, th.club { padding: 0; font-size: 0; border-left: 0; }
+  th.id button, th.club button { display: none; }
+  .row { grid-template-columns: minmax(0, 1fr) 56px 64px; }
+  .headline { gap: 16px; }
+  .commit { padding: 12px 16px; flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M12 1.5v3.2H8.8"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11" /><path d="M8 4h3M8 6.5h4.5M8 9h4.5M8 11.5h3"/></symbol>
+  <symbol id="i-caret" viewBox="0 0 10 10"><path d="M1 3h8L5 8z"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand">FIFA 19<b>LIVE</b></div>
+  <nav class="modes" aria-label="Раздел">
+    <button type="button" data-mode="players" aria-pressed="true">Игроки</button>
+    <button type="button" data-mode="teams" aria-pressed="false">Команды</button>
+    <button type="button" data-mode="youth" aria-pressed="false">Молодёжь</button>
+  </nav>
+  <div class="state" id="state" data-s="scan" role="status"><i class="dot"></i><span>Запуск…</span></div>
+  <div class="career" id="career"></div>
+  <button class="tbtn" id="reattach" type="button"><svg class="i"><use href="#i-refresh"/></svg>Переподключить</button>
+  <button class="tbtn" id="theme" type="button" aria-label="Сменить тему"><svg class="i"><use href="#i-theme"/></svg><span id="themeLbl">Светлая тема</span></button>
+</header>
+
+<nav class="keys" aria-label="Быстрые фильтры">
+  <button class="key red" type="button" data-preset="talents" aria-pressed="false">Таланты U21</button>
+  <button class="key green" type="button" data-preset="club" aria-pressed="false">Мой клуб</button>
+  <button class="key yellow" type="button" data-preset="contracts" aria-pressed="false">Контракты</button>
+  <button class="key cyan" type="button" data-preset="all" aria-pressed="true">Вся база</button>
+  <button class="key red tkey" type="button" data-tpreset="top5" aria-pressed="false">Топ-5 лиг</button>
+  <button class="key green tkey" type="button" data-tpreset="club" aria-pressed="false">Мой клуб</button>
+  <button class="key yellow tkey" type="button" data-tpreset="national" aria-pressed="false">Сборные</button>
+  <button class="key cyan tkey" type="button" data-tpreset="all" aria-pressed="true">Все команды</button>
+  <button class="tswitch" id="timed" type="button" role="switch" aria-checked="false" disabled
+    title="Любой удар с тайм-финишингом и без второго нажатия игра засчитывает как идеальный (зелёный). Редактор помнит настройку и включает её снова после перезапуска игры.">Тайм-финишинг <b id="timedState">выкл</b></button>
+  <button class="tswitch" id="reveal" type="button" role="switch" aria-checked="false" disabled
+    title="На трансферном рынке игра сразу показывает всё о любом игроке: рейтинг, потенциал, стоимость и зарплату, без отчёта скаута. Включай до загрузки карьеры или перезагрузи её после включения. Редактор помнит настройку.">Без скаутинга <b id="revealState">выкл</b></button>
+  <span class="hint"><kbd>/</kbd> поиск · <kbd>↑</kbd><kbd>↓</kbd> по списку · <kbd>Enter</kbd> записать</span>
+</nav>
+
+<main>
+  <section class="list" id="playerList" aria-label="Игроки">
+    <form class="filters" id="filters" onsubmit="return false">
+      <label class="field search"><span>Имя или ID</span><svg class="i"><use href="#i-search"/></svg><input class="inp" id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Например, Messi"></label>
+      <label class="field w-club"><span>Клуб</span><input class="inp" id="club" list="clubs" autocomplete="off" placeholder="Любой"></label>
+      <label class="field w-pos"><span>Позиция</span><select class="inp" id="pos"><option value="">Любая</option><option value="GK">Вратари</option><option value="DEF">Защита</option><option value="MID">Полузащита</option><option value="ATT">Атака</option></select></label>
+      <label class="field w-num"><span>Возраст ≤</span><input class="inp tt" id="agemax" type="number" min="15" max="45" inputmode="numeric"></label>
+      <label class="field w-num"><span>POT ≥</span><input class="inp tt" id="potmin" type="number" min="1" max="99" inputmode="numeric"></label>
+      <label class="field w-num"><span>Контракт до ≤</span><input class="inp tt" id="contract" type="number" min="2018" max="2040" inputmode="numeric"></label>
+      <button class="clear" id="clear" type="button">Сбросить</button>
+      <datalist id="clubs"></datalist>
+    </form>
+    <form class="filters" id="youthForm" hidden onsubmit="return false">
+      <label class="field w-num"><span>OVR ≥</span><input class="inp tt" id="yovrmin" type="number" min="1" max="99" inputmode="numeric"></label>
+      <label class="field w-num"><span>POT ≥</span><input class="inp tt" id="ypotmin" type="number" min="1" max="99" inputmode="numeric"></label>
+      <label class="field w-num"><span>Рост от, см</span><input class="inp tt" id="yhmin" type="number" min="150" max="210" inputmode="numeric"></label>
+      <label class="field w-num"><span>Рост до, см</span><input class="inp tt" id="yhmax" type="number" min="150" max="210" inputmode="numeric"></label>
+      <button class="tswitch" id="yon" type="button" role="switch" aria-checked="false" disabled
+        title="Каждого юниора из отчётов скаутов редактор поднимает до этих значений: рейтинг вместе с атрибутами, потенциал, рост. Пустое поле не трогает параметр.">Подгонять юниоров <b id="yonState">выкл</b></button>
+      <button class="tswitch" id="exact" type="button" role="switch" aria-checked="false" disabled
+        title="В отчётах скаутов у новых юниоров будут точные OVR и POT вместо вилки. Действует на юниоров, которых скаут найдёт после включения. Редактор помнит настройку.">Точные OVR и POT <b id="exactState">выкл</b></button>
+    </form>
+    <div class="tablewrap" id="tablewrap">
+      <table aria-label="Список игроков">
+        <colgroup><col class="c-id" style="width:88px"><col><col class="c-club" style="width:22%"><col style="width:56px"><col style="width:56px"><col style="width:56px"><col style="width:56px"><col style="width:64px"></colgroup>
+        <thead><tr>
+          <th class="id" data-sort="id"><button type="button">ID<svg class="caret"><use href="#i-caret"/></svg></button></th>
+          <th data-sort="name"><button type="button">Имя<svg class="caret"><use href="#i-caret"/></svg></button></th>
+          <th class="club" data-sort="club"><button type="button">Клуб<svg class="caret"><use href="#i-caret"/></svg></button></th>
+          <th data-sort="pos"><button type="button">Поз<svg class="caret"><use href="#i-caret"/></svg></button></th>
+          <th class="n" data-sort="age"><button type="button">Возр<svg class="caret"><use href="#i-caret"/></svg></button></th>
+          <th class="n" data-sort="ovr" aria-sort="descending"><button type="button">OVR<svg class="caret"><use href="#i-caret"/></svg></button></th>
+          <th class="n" data-sort="pot"><button type="button">POT<svg class="caret"><use href="#i-caret"/></svg></button></th>
+          <th class="n" data-sort="contract"><button type="button">Контр<svg class="caret"><use href="#i-caret"/></svg></button></th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="listEmpty" hidden></div>
+    </div>
+    <div class="listfoot" id="listfoot"></div>
+  </section>
+
+  <section class="list" id="teamList" aria-label="Команды" hidden>
+    <form class="filters" onsubmit="return false">
+      <label class="field search"><span>Команда</span><svg class="i"><use href="#i-search"/></svg><input class="inp" id="tq" type="search" autocomplete="off" spellcheck="false" placeholder="Например, Napoli"></label>
+      <label class="field w-club"><span>Лига</span><select class="inp" id="tleague"><option value="">Любая</option></select></label>
+    </form>
+    <div class="tablewrap">
+      <table aria-label="Список команд">
+        <colgroup><col><col style="width:40%"><col style="width:56px"></colgroup>
+        <thead><tr><th><button type="button" tabindex="-1">Команда</button></th><th class="club"><button type="button" tabindex="-1">Лига</button></th><th class="n"><button type="button" tabindex="-1">OVR</button></th></tr></thead>
+        <tbody id="trows"></tbody>
+      </table>
+      <div class="empty" id="tEmpty" hidden></div>
+    </div>
+    <div class="listfoot" id="tfoot"></div>
+  </section>
+
+  <section class="panel" id="panel" aria-label="Карточка игрока">
+    <div class="empty" id="panelEmpty">
+      <h3>Выбери игрока</h3>
+      <p>Найди игрока по имени или нажми цветную кнопку сверху. Красная показывает молодых с высоким потенциалом, жёлтая показывает тех, у кого контракт заканчивается в этом сезоне.</p>
+      <p>Правка сначала подсвечивается голубым. В игру она уходит по <b>Enter</b> или кнопке «Записать в игру». Сохрани карьеру перед крупными изменениями.</p>
+    </div>
+    <div id="player" hidden></div>
+    <div class="commit" id="commit" hidden>
+      <span class="count tt" id="pendCount">0</span>
+      <span class="msg" id="pendMsg">не записано</span>
+      <button class="ghost" id="discard" type="button">Отменить</button>
+      <button class="primary" id="write" type="button">Записать в игру</button>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" role="alert" hidden></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path, body) {
+  const r = await fetch(path, body ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : undefined);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `Ошибка ${r.status}`);
+  return j;
+}
+let toastTimer;
+function toast(msg, kind) { const t = $('#toast'); t.textContent = msg; t.classList.toggle('info', kind === 'info'); t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 6000); }
+
+const POS = ['GK','SW','RWB','RB','RCB','CB','LCB','LB','LWB','RDM','CDM','LDM','RM','RCM','CM','LCM','LM','RAM','CAM','LAM','RF','CF','LF','RW','RS','ST','LS','LW'];
+const EPOCH = Date.UTC(1582, 9, 14);
+const dayToIso = d => new Date(EPOCH + d * 864e5).toISOString().slice(0, 10);
+const isoToDay = s => Math.round((Date.parse(s) - EPOCH) / 864e5);
+const band = v => v >= 80 ? 'v-hi' : v >= 65 ? 'v-mid' : 'v-lo';
+
+const GROUPS = [
+  ['atk', 'Атака', [['crossing','Навесы'],['finishing','Завершение'],['headingaccuracy','Игра головой'],['shortpassing','Короткий пас'],['volleys','Удар с лёта']]],
+  ['skl', 'Техника', [['dribbling','Дриблинг'],['curve','Подкрутка'],['freekickaccuracy','Штрафные'],['longpassing','Длинный пас'],['ballcontrol','Контроль мяча']]],
+  ['mov', 'Движение', [['acceleration','Ускорение'],['sprintspeed','Скорость'],['agility','Ловкость'],['reactions','Реакция'],['balance','Баланс']]],
+  ['pow', 'Сила', [['shotpower','Сила удара'],['jumping','Прыгучесть'],['stamina','Выносливость'],['strength','Сила'],['longshots','Дальние удары']]],
+  ['men', 'Мышление', [['aggression','Агрессия'],['interceptions','Перехваты'],['positioning','Выбор позиции'],['vision','Видение поля'],['penalties','Пенальти'],['composure','Хладнокровие']]],
+  ['def', 'Защита', [['marking','Опека'],['standingtackle','Отбор'],['slidingtackle','Подкат']]],
+  ['gk', 'Вратарь', [['gkdiving','Прыжок'],['gkhandling','Игра руками'],['gkkicking','Игра ногами'],['gkpositioning','Позиционирование'],['gkreflexes','Реакция']]],
+];
+const TRAITS1 = ['Негибкость','Дальний вброс','Мощный штрафной','Симулянт','Склонен к травмам','Не травмируется','Избегает слабой ноги','Подкаты в падении','Обыгрывает линию защиты','Эгоист','Лидер','Спорит с судьями','Ранние навесы','Удар на технику','Артистизм','Длинный пас','Дальние удары','Дриблёр','Плеймейкер','Вратарь идёт на угловые','Отбивает кулаками','Вратарь: дальний бросок','Сильный удар головой','Вратарь: один на один','Сверхдальний вброс','Удар внешней стороной','Любимец фанатов','Пас с подкруткой','Второе дыхание','Акробатический вынос'];
+const WORK = {0: 'Средняя', 1: 'Низкая', 2: 'Высокая'};
+const LINK_LABELS = {jerseynumber: 'Номер', position: 'Позиция в заявке', form: 'Форма', injury: 'Травма', leagueappearances: 'Матчи в лиге', leaguegoals: 'Голы в лиге', yellows: 'Жёлтые', reds: 'Красные', leaguegoalsprevmatch: 'Голы в прошлом матче', leaguegoalsprevthreematches: 'Голы за 3 матча', istopscorer: 'Лучший бомбардир', isamongtopscorers: 'Среди бомбардиров', isamongtopscorersinteam: 'Среди бомбардиров команды'};
+// display only: 10 and 11 confirmed in game, 2/5/6 seen on a new signing and loans. The game keeps the lists elsewhere,
+// so writing the status does not list a player.
+const CONTRACT_STATUS = [[0, 'Обычный'], [10, 'Выставлен на трансфер'], [11, 'Выставлен в аренду'], [2, 'Только что подписан'], [5, 'Взят в аренду'], [6, 'Отдан в аренду']];
+const CONTRACT_LABELS = {wage: 'Зарплата', contract_date: 'Дата контракта', duration_months: 'Срок, мес.', signon_bonus: 'Бонус за подпись', contract_status: 'Статус', playerrole: 'Роль в команде', loan_wage_split: 'Доля зарплаты в аренде', performancebonustype: 'Тип бонуса', performancebonusvalue: 'Размер бонуса', performancebonuscount: 'Цель бонуса', performancebonuscountachieved: 'Выполнено', isperformancebonusachieved: 'Бонус получен', last_status_change_date: 'Изменён'};
+
+const S = { mode: 'players', tpreset: 'all', status: {}, sort: 'ovr', desc: true, preset: 'all', list: [], sel: null, cur: null,
+            pending: new Map(), edited: new Set(), log: [], nations: {}, teams: [], teamByName: new Map(), careerKey: '' };
+
+/* ---------- status ---------- */
+async function poll() {
+  let s;
+  try { s = await api('/api/status'); } catch { s = {state: 'error', msg: 'Редактор выключен: он закрывается сам через минуту после выхода из игры. Запусти FIFA 19 из Steam или «Запуск редактора.bat»'}; }
+  const was = S.status;
+  S.status = s;
+  if (s.restored > (was.restored ?? s.restored)) {
+    toast(`Игра откатила закреплённые значения, редактор вернул их (${s.restored - was.restored})`, 'info');
+    reloadCur();
+  }
+  if (s.rlc && !was.rlc && S.cur?.kind === 'player') reloadCur();  // release clauses just found
+  const el = $('#state');
+  el.dataset.s = s.state;
+  el.querySelector('span').textContent = s.state === 'ready' ? `Подключено к игре · ${s.players.toLocaleString('ru')} игроков в базе`
+    : s.state === 'scan' ? 'Ищу базу в памяти игры, это 10–20 секунд…' : (s.msg || 'Не подключено');
+  const c = s.career;
+  $('#career').innerHTML = c ? `<span class="lbl">Карьера</span><strong>${esc(c.club)}</strong><span class="tt">${esc(c.date)}</span>` : (s.state === 'ready' ? '<span>Карьера не загружена, показаны составы из главного меню</span>' : '');
+  for (const ck of document.querySelectorAll('[data-preset="club"], [data-tpreset="club"]')) { ck.disabled = !c; ck.title = c ? '' : 'Доступно, когда в игре загружена карьера'; }
+  $('#reattach').disabled = s.state === 'scan';
+  if (!S.timedBusy) showTimed(s.state === 'ready' ? s.timed : 'unavailable');
+  if (!S.revealBusy) showReveal(s.state === 'ready' ? s.reveal : 'unavailable');
+  if (!S.exactBusy) showSwitch('exact', s.state === 'ready' ? s.exact : 'unavailable');
+  const key = s.state === 'ready' ? `${s.pid}|${c ? c.clubid + c.date : ''}|${s.players}` : '';
+  if (s.state === 'ready' && key !== S.careerKey) {
+    const fresh = !S.careerKey || S.careerKey.split('|')[0] !== String(s.pid);
+    S.careerKey = key;
+    if (fresh) await loadRefs();
+    await loadList();
+    reloadCur();
+  }
+  if (s.state !== 'ready') { S.careerKey = ''; showListState(s); }
+  setTimeout(poll, s.state === 'scan' ? 1000 : 4000);
+}
+function showListState(s) {
+  $('#rows').innerHTML = ''; $('#listfoot').textContent = '';
+  const e = $('#listEmpty'); e.hidden = false;
+  e.innerHTML = s.state === 'scan'
+    ? '<h3>Подключаюсь к FIFA 19</h3><p>Ищу таблицы базы данных в памяти игры. Обычно это 10–20 секунд, игру можно не сворачивать.</p>'
+    : s.state === 'nogame'
+    ? '<h3>FIFA 19 не запущена</h3><p>Запусти игру. Редактор подключится сам, как только она откроется.</p>'
+    : `<h3>Пока не подключился</h3><p>${esc(s.msg)}</p><p>Редактор повторяет попытку каждые 15 секунд. Если ошибка не уходит, перезапусти редактор от имени администратора.</p>`;
+}
+async function loadRefs() {
+  try {
+    const [teams, nations] = await Promise.all([api('/api/teams'), api('/api/nations')]);
+    S.teams = teams; S.nations = nations;
+    S.teamByName = new Map(teams.map(t => [t.name, t.id]));
+    fillLeagues(); if (S.mode === 'teams') renderTeams();
+    $('#clubs').innerHTML = teams.map(t => `<option value="${esc(t.name)}">${esc(t.league)}</option>`).join('');
+  } catch (e) { toast(e.message); }
+}
+
+/* ---------- list ---------- */
+const PRESETS = {
+  talents: () => ({agemax: 21, potmin: 80, contract: '', club: '', pos: '', sort: 'pot', desc: true}),
+  club: () => ({agemax: '', potmin: '', contract: '', club: S.status.career?.club || '', pos: '', sort: 'ovr', desc: true}),
+  contracts: () => ({agemax: '', potmin: '', contract: S.status.career?.season_end || 2019, club: '', pos: '', sort: 'ovr', desc: true}),
+  all: () => ({agemax: '', potmin: '', contract: '', club: '', pos: '', sort: 'ovr', desc: true}),
+};
+function applyPreset(name) {
+  const p = PRESETS[name]();
+  S.preset = name;
+  for (const k of ['agemax', 'potmin', 'contract', 'club', 'pos']) $('#' + k).value = p[k];
+  S.sort = p.sort; S.desc = p.desc;
+  syncKeys(); loadList();
+}
+function syncKeys() { document.querySelectorAll('.key:not(.tkey)').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.preset === S.preset))); }
+let listSeq = 0;
+async function loadList() {
+  if (S.status.state !== 'ready') return;
+  if (S.mode === 'youth') {
+    const seq = ++listSeq;
+    try {
+      const r = await api('/api/players?' + new URLSearchParams({team: YOUTH_POOL, sort: S.sort, desc: S.desc ? '1' : '0'}));
+      if (seq === listSeq) { S.list = r.players; renderRows(r.players, r.total, null, 'Скауты пока никого не прислали. Отправь молодёжного скаута в задание, и юниоры из отчёта появятся здесь.'); }
+    } catch (e) { if (seq === listSeq) renderRows([], 0, e.message); }
+    return;
+  }
+  const club = $('#club').value.trim();
+  const team = S.preset === 'club' && S.status.career ? S.status.career.clubid : club ? S.teamByName.get(club) : undefined;
+  if (club && team === undefined && S.preset !== 'club') { renderRows([], 0, 'Такого клуба нет в базе. Выбери его из подсказки.'); return; }
+  const q = new URLSearchParams({q: $('#q').value, team: team ?? '', agemax: $('#agemax').value, potmin: $('#potmin').value,
+    contract: $('#contract').value, pos: $('#pos').value, sort: S.sort, desc: S.desc ? '1' : '0'});
+  const seq = ++listSeq;
+  try {
+    const r = await api('/api/players?' + q);
+    if (seq !== listSeq) return;
+    S.list = r.players; renderRows(r.players, r.total);
+  } catch (e) { if (seq === listSeq) renderRows([], 0, e.message); }
+}
+function renderRows(list, total, err, emptyMsg) {
+  document.querySelectorAll('#playerList thead th').forEach(th => th.dataset.sort === S.sort ? th.setAttribute('aria-sort', S.desc ? 'descending' : 'ascending') : th.removeAttribute('aria-sort'));
+  const season = S.status.career?.season_end || 2019;
+  $('#rows').innerHTML = list.map(p => {
+    const ed = [...S.edited].some(k => k.startsWith(`CZUM|${p.id}|`));
+    return `<tr data-i="${p.i}" data-id="${p.id}" tabindex="-1" aria-selected="${same('player', p.id)}">
+      <td class="n id">${p.id}</td><td class="name${ed ? ' edited' : ''}">${esc(p.name)}</td><td class="club">${p.clubid === YOUTH_POOL ? 'Отчёт скаута' : esc(p.club)}</td>
+      <td>${p.pos}</td><td class="n">${p.age}</td><td class="n ${band(p.ovr)}">${p.ovr}</td><td class="n ${band(p.pot)}">${p.pot}</td>
+      <td class="n${p.contract && p.contract <= season ? ' c-exp' : ''}">${p.contract || '—'}</td></tr>`;
+  }).join('');
+  const e = $('#listEmpty');
+  e.hidden = !!list.length;
+  if (!list.length) e.innerHTML = err ? `<h3>Ошибка</h3><p>${esc(err)}</p>` : emptyMsg ? `<h3>Пока пусто</h3><p>${esc(emptyMsg)}</p>` : '<h3>Никого не нашлось</h3><p>Ослабь фильтры или нажми «Сбросить».</p>';
+  $('#listfoot').innerHTML = list.length ? `<span>Найдено <span class="tt">${total.toLocaleString('ru')}</span></span>${total > list.length ? `<span>показаны первые ${list.length}, уточни поиск</span>` : ''}` : '';
+}
+
+/* ---------- player ---------- */
+const same = (kind, id) => S.cur?.kind === kind && S.cur.id === id;
+function reloadCur() { if (!S.cur) return; return S.cur.kind === 'team' ? openTeam(S.cur.id, true) : openPlayer(S.cur.i, S.cur.id, true); }
+async function openPlayer(i, id, keepScroll) {
+  if (S.pending.size && !same('player', id) && !confirm('Есть незаписанные правки. Выбросить их?')) return;
+  if (!same('player', id)) S.pending.clear();
+  try {
+    const d = await api(`/api/player?i=${i}&id=${id}`);
+    S.cur = {kind: 'player', i: d.i, id, d};
+    document.querySelectorAll('#rows tr').forEach(tr => tr.setAttribute('aria-selected', String(+tr.dataset.id === id)));
+    const top = $('#panel').scrollTop;
+    renderPlayer(d);
+    if (!keepScroll) $('#panel').scrollTop = 0; else $('#panel').scrollTop = top;
+  } catch (e) { toast(e.message); }
+}
+function fkey(t, k, f) { return `${t}|${k}|${f}`; }
+
+/* ---------- teams ---------- */
+const TOP5 = new Set([13, 53, 31, 19, 16]);
+const foldJs = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function setMode(m) {
+  if (S.mode === m) return;
+  if (S.pending.size && !confirm('Есть незаписанные правки. Выбросить их?')) return;
+  S.pending.clear(); updateCommit();
+  S.mode = m; document.body.dataset.mode = m;
+  document.querySelectorAll('.modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  $('#playerList').hidden = m === 'teams'; $('#teamList').hidden = m !== 'teams';
+  $('#filters').hidden = m === 'youth'; $('#youthForm').hidden = m !== 'youth';
+  $('#panel').setAttribute('aria-label', m === 'teams' ? 'Карточка команды' : 'Карточка игрока');
+  S.cur = null; $('#player').hidden = true; $('#panelEmpty').hidden = false;
+  $('#panelEmpty').innerHTML = m === 'youth'
+    ? `<h3>Молодёжь от скаутов</h3><p>Слева юниоры из отчётов твоих скаутов. Задай нижнюю планку OVR, POT и рост, включи «Подгонять юниоров», и редактор подтянет под неё всех нынешних юниоров и каждого нового. Рейтинг растёт вместе с атрибутами. Тип игрока выбирается в игре, в задании скаута.</p>
+       <p>Игра показывает вилку вокруг настоящего рейтинга: чем дольше скаут знает игрока, тем она уже.</p>
+       <h3>Скауты</h3><div class="scouts" id="scouts"><p class="note">Загружаю…</p></div>`
+    : m === 'teams'
+    ? '<h3>Выбери команду</h3><p>Найди клуб по названию или нажми цветную кнопку сверху. В карточке меняются название, бюджет на старте карьеры, престиж, цвета клуба, капитан и исполнители стандартов.</p>'
+    : '<h3>Выбери игрока</h3><p>Найди игрока по имени или нажми цветную кнопку сверху. Красная показывает молодых с высоким потенциалом, жёлтая показывает тех, у кого контракт заканчивается в этом сезоне.</p><p>Правка сначала подсвечивается голубым. В игру она уходит по <b>Enter</b> или кнопке «Записать в игру». Сохрани карьеру перед крупными изменениями.</p>';
+  if (m === 'teams') renderTeams();
+  else loadList();
+  if (m === 'youth') loadYouth();
+}
+/* ---------- youth ---------- */
+const YOUTH_POOL = 112264;  // hidden team that holds every prospect the scouts report
+const YKEYS = ['ovrmin', 'potmin', 'hmin', 'hmax'];
+const STARS = [0, 1, 2, 3, 4].map(n => [n, `${n + 1} из 5`]);
+async function loadYouth(rules) {
+  try {
+    const y = await api('/api/youth', rules);
+    const r = y.rules || {}, b = $('#yon');
+    for (const k of YKEYS) { const el = $('#y' + k); if (document.activeElement !== el) el.value = r[k] ?? ''; }
+    b.disabled = false; b.setAttribute('aria-checked', String(!!r.on)); $('#yonState').textContent = r.on ? 'вкл' : 'выкл';
+    renderScouts(y.scouts);
+    if (rules && r.on) setTimeout(loadList, 6000);  // the editor applies rules on its next 5-second tick
+  } catch (e) { toast(e.message); }
+}
+function renderScouts(scouts) {
+  const el = $('#scouts'); if (!el) return;
+  const ymd = v => `${String(v % 100).padStart(2, '0')}.${String(Math.floor(v / 100) % 100).padStart(2, '0')}.${Math.floor(v / 10000)}`;
+  el.innerHTML = scouts.length ? scouts.map(({fields: f, returning}) => `<div class="row"><span>${esc(f.firstname)} ${esc(f.lastname)}</span>${
+    [['experience', 'Опыт'], ['knowledge', 'Решение']].map(([n, l]) => `<label class="field"><span>${l}</span><select class="inp" data-scout="${f.scoutid}" data-sf="${n}">${
+      STARS.map(([v, t]) => `<option value="${v}"${v === f[n] ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`).join('')}</div>${
+    returning ? `<div class="mission"><span>В задании до <b class="tt">${ymd(returning)}</b>, отчёт приходит раз в месяц</span></div>`
+      : '<p class="note">Не в задании.</p>'}`).join('')
+    : '<p class="note">Скаутов нет. Найми молодёжного скаута в игре: Офис → Сеть поиска игроков.</p>';
+}
+const youthRules = on => ({on, ...Object.fromEntries(YKEYS.map(k => [k, $('#y' + k).value]))});
+function saveYouth(on) {
+  const r = youthRules(on);
+  if (on && !YKEYS.some(k => r[k])) { toast('Заполни хотя бы одно поле: без планки подгонять нечего.'); return loadYouth(); }
+  if (r.hmin && r.hmax && +r.hmin > +r.hmax) { toast('Рост «от» больше, чем «до». Поправь одно из полей.'); return; }
+  loadYouth(r);
+}
+YKEYS.forEach(k => $('#y' + k).addEventListener('change', () => saveYouth($('#yon').getAttribute('aria-checked') === 'true')));
+$('#yon').addEventListener('click', () => saveYouth($('#yon').getAttribute('aria-checked') !== 'true'));
+function fillLeagues() {
+  const sel = $('#tleague'), cur = sel.value;
+  const leagues = [...new Map(S.teams.filter(t => t.leagueid != null).map(t => [t.leagueid, t.league])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  sel.innerHTML = '<option value="">Любая</option>' + leagues.map(([id, n]) => `<option value="${id}">${esc(n)}</option>`).join('');
+  sel.value = cur;
+}
+function renderTeams() {
+  if (!S.teams.length) return;
+  const q = foldJs($('#tq').value.trim()), lg = $('#tleague').value, p = S.tpreset, club = S.status.career?.clubid;
+  const NATIONAL = new Set([78, 2136]);
+  const list = S.teams.filter(t => (!q || foldJs(t.name).includes(q) || String(t.id) === q) && (!lg || String(t.leagueid) === lg)
+    && (p !== 'top5' || TOP5.has(t.leagueid)) && (p !== 'national' || NATIONAL.has(t.leagueid)) && (p !== 'club' || t.id === club));
+  $('#trows').innerHTML = list.map(t => `<tr data-id="${t.id}" tabindex="-1" aria-selected="${same('team', t.id)}">
+    <td class="name">${esc(t.name)}</td><td class="club">${esc(t.league || '—')}</td>
+    <td class="n ${t.ovr ? band(t.ovr) : ''}">${t.ovr ?? '—'}</td></tr>`).join('');
+  const e = $('#tEmpty'); e.hidden = !!list.length;
+  if (!list.length) e.innerHTML = '<h3>Ничего не нашлось</h3><p>Ослабь фильтры или нажми «Все команды».</p>';
+  $('#tfoot').innerHTML = `<span>Команд <span class="tt">${list.length}</span></span>`;
+}
+async function openTeam(id, keepScroll) {
+  if (S.pending.size && !same('team', id) && !confirm('Есть незаписанные правки. Выбросить их?')) return;
+  if (!same('team', id)) S.pending.clear();
+  try {
+    const [d, sq] = await Promise.all([api(`/api/team?id=${id}`), api(`/api/players?team=${id}&sort=ovr&desc=1`)]);
+    d.name = d.fields.teamname; d.squad = sq.players;
+    S.cur = {kind: 'team', i: d.i, id, d};
+    document.querySelectorAll('#trows tr').forEach(tr => tr.setAttribute('aria-selected', String(+tr.dataset.id === id)));
+    const top = $('#panel').scrollTop;
+    renderTeam(d);
+    $('#panel').scrollTop = keepScroll ? top : 0;
+  } catch (e) { toast(e.message); }
+}
+const hex2 = v => Math.max(0, Math.min(255, v | 0)).toString(16).padStart(2, '0');
+function teamColor(d, n) {
+  return '#' + ['r', 'g', 'b'].map(c => hex2(S.pending.get(fkey('lyxL', d.fields.teamid, `teamcolor${n}${c}`))?.value ?? d.fields[`teamcolor${n}${c}`])).join('');
+}
+function renderProCareer(d) {
+  const c = d.playercareer, k = {playerid: d.fields.playerid};
+  const row = (n, l, kind, opts) => wideRow(d, n, l, kind, opts, 'bxis', k, c.i, c.range, c.fields);
+  return `<p class="note">Режим карьеры копирует эти поля в базу только при сохранении, поэтому здесь видно состояние на момент последнего сейва. Менять запрос отсюда бесполезно: игра считает его у себя и затрёт правку при следующем сохранении.</p>
+    <div class="grid2">${d.careeruser ? wideRow(d, 'wage', 'Зарплата (её показывает игра)', null, null, 'mPrV', {userid: 0}, d.careeruser.i, d.careeruser.range, d.careeruser.fields) : ''}${[row('playerrequest', 'Активный запрос (0 = нет)'), row('requestactiondays', 'Дней до ответа клуба'),
+      row('numtransferrequests', 'Запросов на трансфер'), row('numloanrequests', 'Запросов на аренду'),
+      row('numwithdrawrequests', 'Отозванных запросов'), row('playedlastmatch', 'Играл в прошлом матче (1 = да)')].join('')}</div>
+`;
+}
+function renderManager(d) {
+  const m = d.manager, k = {clubteamid: d.fields.teamid};
+  const row = (n, l) => wideRow(d, n, l, null, null, 'biWl', k, m.i, m.range, m.fields);
+  return `<p class="note">Есть только в карьере тренера. Высокое доверие совета защищает от увольнения.</p>
+    <div class="grid2">${[row('boardconfidence', 'Доверие совета'), row('managerreputation', 'Репутация тренера'), row('wage', 'Зарплата тренера'),
+      row('losingstreak', 'Серия поражений'), row('playersreleasedthisseason', 'Отпущено игроков за сезон'), row('totalearnings', 'Заработано всего')].join('')}</div>`;
+}
+function renderTeam(d) {
+  const f = d.fields, tid = f.teamid, k = {teamid: tid};
+  const row = (n, label, kind, opts) => wideRow(d, n, label, kind, opts, 'lyxL', k, d.i, d.range);
+  const squad = [[0, '—'], ...(d.squad || []).map(p => [p.id, `${p.name} · ${p.pos} ${p.ovr}`])];
+  const main = [row('teamname', 'Название', 'text'), row('transferbudget', 'Трансферный бюджет на старте карьеры'),
+    row('domesticprestige', 'Престиж в стране'), row('internationalprestige', 'Международный престиж'),
+    row('popularity', 'Популярность'), row('clubworth', 'Стоимость клуба'), row('profitability', 'Доходность')].join('');
+  const ratings = `<p class="note">Игра пересчитывает рейтинги команды по составу, поэтому правка здесь может не продержаться.</p><div class="grid2">${
+    [row('overallrating', 'Общий'), row('attackrating', 'Атака'), row('midfieldrating', 'Полузащита'), row('defenserating', 'Защита')].join('')}</div>`;
+  const colors = `<div class="swatches">${[1, 2, 3].map(n => {
+    const c = teamColor(d, n), pend = ['r', 'g', 'b'].some(x => S.pending.has(fkey('lyxL', tid, `teamcolor${n}${x}`)));
+    return f[`teamcolor${n}r`] === undefined ? '' : `<label class="swatch${pend ? ' pending' : ''}"><span>Цвет ${n}</span><input type="color" data-color="${n}" value="${c}"><span class="tt">${c.toUpperCase()}</span></label>`;
+  }).join('')}</div>`;
+  const takers = `<div class="grid2">${[['captainid', 'Капитан'], ['penaltytakerid', 'Пенальти'], ['freekicktakerid', 'Штрафные'],
+    ['leftfreekicktakerid', 'Штрафные слева'], ['rightfreekicktakerid', 'Штрафные справа'], ['longkicktakerid', 'Дальние штрафные'],
+    ['leftcornerkicktakerid', 'Угловые слева'], ['rightcornerkicktakerid', 'Угловые справа']].map(([n, l]) => row(n, l, 'select', squad)).join('')}</div>`;
+  const all = Object.keys(f).sort().map(n => row(n, n, typeof f[n] === 'string' ? 'text' : null)).join('');
+  const sections = [['tmain', 'Клуб', `<div class="grid2">${main}</div>`], ...(d.manager ? [['tman', 'Тренер', renderManager(d)]] : []), ['tcolor', 'Цвета клуба', colors],
+    ['tset', 'Стандарты и капитан', takers], ['trate', 'Рейтинги', ratings],
+    ['log', `Журнал${S.log.length ? ' · ' + S.log.length : ''}`, renderLog()],
+    ['tall', 'Все поля', `<p class="note">Сырые значения таблицы teams. Названия курсивом неизвестны: этих полей нет в мете FIFA 23 (в основном это тактические ползунки FIFA 19).</p><div class="grid2">${all}</div>`]];
+  $('#panelEmpty').hidden = true;
+  const p = $('#player'); p.hidden = false;
+  p.innerHTML = `<div class="ph">
+      <div class="band"><h2 title="${esc(f.teamname)}">${esc(f.teamname)}</h2></div>
+      <p class="meta"><b>${esc(d.league || 'Без лиги')}</b><span class="tt">ID ${tid}</span></p></div>
+    <nav class="jump" aria-label="Разделы">${sections.map(([id, t]) => `<a href="#s-${id}">${esc(t)}</a>`).join('')}</nav>
+    <div class="sections">${sections.map(([id, t, body]) => `<section class="sec" id="s-${id}"><h3>${esc(t)}</h3>${body}</section>`).join('')}</div>`;
+  updateCommit();
+}
+function stageColor(el) {
+  const d = S.cur.d, n = el.dataset.color, tid = d.fields.teamid, v = el.value;
+  ['r', 'g', 'b'].forEach((c, j) => {
+    const f = `teamcolor${n}${c}`, val = parseInt(v.slice(1 + 2 * j, 3 + 2 * j), 16), old = d.fields[f], id = fkey('lyxL', tid, f);
+    if (val === old) S.pending.delete(id);
+    else S.pending.set(id, {table: 'lyxL', i: d.i, key: {teamid: tid}, field: f, value: val, old, label: `Цвет ${n}`, pname: d.name, pid: tid});
+  });
+  el.closest('.swatch').classList.toggle('pending', ['r', 'g', 'b'].some(c => S.pending.has(fkey('lyxL', tid, `teamcolor${n}${c}`))));
+  el.parentElement.querySelector('.tt').textContent = v.toUpperCase();
+  updateCommit();
+}
+function cell(t, i, key, f, v, rng, kind, opts, extra = '') {
+  const kv = Object.values(key)[0];
+  const id = fkey(t, kv, f);
+  const pend = S.pending.get(id);
+  const val = pend ? pend.value : v;
+  const cls = extra + (S.edited.has(id) ? ' edited' : '') + (pend ? ' pending' : '');
+  const data = `data-t="${t}" data-i="${i}" data-k='${esc(JSON.stringify(key))}' data-f="${f}" data-old="${esc(v)}"`;
+  const [lo, hi] = rng || [0, 0];
+  if (kind === 'select') return `<select class="${cls}" ${data}>${opts.map(([ov, ol]) => `<option value="${ov}"${+ov === +val ? ' selected' : ''}>${esc(ol)}</option>`).join('')}${opts.some(([ov]) => +ov === +val) ? '' : `<option value="${val}" selected>${val}</option>`}</select>`;
+  if (kind === 'date') return `<input type="date" class="${cls}" ${data} data-kind="date" value="${dayToIso(val)}">`;
+  if (kind === 'text') return `<input type="text" class="${cls}" ${data} data-kind="text" value="${esc(val)}" spellcheck="false">`;
+  return `<input type="number" class="${cls}" ${data} min="${lo}" max="${hi}" value="${val}" inputmode="numeric">`;
+}
+function row(label, inner, extra = '', cls = '') { return `<label class="row ${cls}"><span title="${esc(label)}">${esc(label)}</span>${inner}${extra}</label>`; }
+function attrRow(d, f, label) {
+  const v = d.fields[f]; if (v === undefined) return '';
+  const id = fkey('CZUM', d.fields.playerid, f);
+  const pv = S.pending.get(id)?.value ?? v;
+  return row(label, cell('CZUM', d.i, {playerid: d.fields.playerid}, f, v, d.range[f]),
+    `<span class="bar ${band(pv)}" aria-hidden="true"><i style="width:${Math.max(0, Math.min(99, pv)) / 99 * 100}%"></i></span>`, S.edited.has(id) ? 'edited' : '');
+}
+function wideRow(d, f, label, kind, opts, t = 'CZUM', key, i, range, fields) {
+  fields = fields || d.fields; const v = fields[f]; if (v === undefined) return '';
+  key = key || {playerid: d.fields.playerid}; i = i ?? d.i; range = range || d.range;
+  const id = fkey(t, Object.values(key)[0], f);
+  return row(label, cell(t, i, key, f, v, range[f], kind, opts), '', 'wide' + (S.edited.has(id) ? ' edited' : '') + (/[A-Z]/.test(f) ? ' unknown' : ''));
+}
+const LOOK = [['hashighqualityhead', 'Отсканированное лицо (1 = да)'], ['headassetid', 'Модель лица'], ['headtypecode', 'Тип головы'], ['headclasscode', 'Класс головы'],
+  ['hairtypecode', 'Причёска'], ['haircolorcode', 'Цвет волос'], ['facialhairtypecode', 'Борода и усы'], ['facialhaircolorcode', 'Цвет бороды'],
+  ['eyebrowcode', 'Брови'], ['eyecolorcode', 'Цвет глаз'], ['skintonecode', 'Тон кожи'], ['skintypecode', 'Тип кожи'], ['bodytypecode', 'Телосложение'],
+  ['faceposerpreset', 'Мимика'], ['shoetypecode', 'Бутсы'], ['shoedesigncode', 'Дизайн бутс'], ['shoecolorcode1', 'Цвет бутс 1'], ['shoecolorcode2', 'Цвет бутс 2'],
+  ['gkglovetypecode', 'Вратарские перчатки'], ['jerseystylecode', 'Заправка футболки'], ['jerseyfit', 'Посадка футболки'], ['jerseysleevelengthcode', 'Длина рукава'],
+  ['hasseasonaljersey', 'Сезонная форма'], ['socklengthcode', 'Длина гетр'], ['accessorycode1', 'Аксессуар 1'], ['accessorycolourcode1', 'Цвет аксессуара 1'],
+  ['accessorycode2', 'Аксессуар 2'], ['accessorycolourcode2', 'Цвет аксессуара 2'], ['accessorycode3', 'Аксессуар 3'], ['accessorycolourcode3', 'Цвет аксессуара 3'],
+  ['accessorycode4', 'Аксессуар 4'], ['accessorycolourcode4', 'Цвет аксессуара 4'], ['tattooleftarm', 'Тату: левая рука'], ['tattoorightarm', 'Тату: правая рука'],
+  ['runningcode1', 'Стиль бега 1'], ['runningcode2', 'Стиль бега 2'], ['finishingcode1', 'Анимация удара 1'], ['finishingcode2', 'Анимация удара 2']];
+function renderPlayer(d) {
+  const f = d.fields, pid = f.playerid;
+  const club = d.links.find(l => !l.national);
+  const nat = S.nations[f.nationality] || f.nationality;
+  const nations = Object.entries(S.nations).sort((a, b) => a[1].localeCompare(b[1], 'ru'));
+  const posOpts = POS.map((p, n) => [n, p]);
+  const pos2 = [[-1, '—'], ...posOpts];
+  const k = {playerid: pid};
+  const main = [
+    wideRow(d, 'birthdate', 'Дата рождения', 'date'),
+    wideRow(d, 'nationality', 'Национальность', 'select', nations.length ? nations : [[f.nationality, nat]]),
+    wideRow(d, 'preferredposition1', 'Основная позиция', 'select', posOpts),
+    wideRow(d, 'preferredposition2', 'Позиция 2', 'select', pos2),
+    wideRow(d, 'preferredposition3', 'Позиция 3', 'select', pos2),
+    wideRow(d, 'preferredposition4', 'Позиция 4', 'select', pos2),
+    wideRow(d, 'preferredfoot', 'Ведущая нога', 'select', [[1, 'Правая'], [2, 'Левая']]),
+    wideRow(d, 'weakfootabilitytypecode', 'Слабая нога', 'select', [1,2,3,4,5].map(n => [n, `${n} из 5`])),
+    wideRow(d, 'skillmoves', 'Финты', 'select', [0,1,2,3,4].map(n => [n, `${n + 1} из 5`])),
+    wideRow(d, 'internationalrep', 'Известность', 'select', [1,2,3,4,5].map(n => [n, `${n} из 5`])),
+    wideRow(d, 'attackingworkrate', 'Нагрузка в атаке', 'select', Object.entries(WORK)),
+    wideRow(d, 'defensiveworkrate', 'Нагрузка в защите', 'select', Object.entries(WORK)),
+    wideRow(d, 'height', 'Рост, см'), wideRow(d, 'weight', 'Вес, кг'),
+    wideRow(d, 'contractvaliduntil', 'Контракт до, год'),
+    wideRow(d, 'playerjointeamdate', 'В клубе с', 'date'),
+    wideRow(d, 'isretiring', 'Завершает карьеру', 'select', [[0, 'Нет'], [1, 'Да']]),
+  ].join('');
+  const t1 = f.trait1 ?? 0, t2 = f.trait2 ?? 0;
+  const traitPend = n => S.pending.get(fkey('CZUM', pid, n))?.value;
+  const v1 = traitPend('trait1') ?? t1, v2 = traitPend('trait2') ?? t2;
+  const bits2 = Math.log2((d.range.trait2?.[1] ?? 0) + 1) | 0;
+  const traits = `<div class="traits" data-trait="trait1" data-old="${t1}">${TRAITS1.map((n, b) => `<label class="chk"><input type="checkbox" data-bit="${b}"${v1 >> b & 1 ? ' checked' : ''}>${esc(n)}</label>`).join('')}</div>
+    <p class="sub">Скрытые трейты <small>названия неизвестны, номера битов поля trait2</small></p>
+    <div class="bits" data-trait="trait2" data-old="${t2}">${Array.from({length: bits2}, (_, b) => `<label><input type="checkbox" data-bit="${b}" aria-label="Скрытый трейт ${b}"${Math.floor(v2 / 2 ** b) % 2 ? ' checked' : ''}><span>${b}</span></label>`).join('')}</div>`;
+  const links = d.links.map(l => {
+    const lk = {artificialkey: l.fields.artificialkey};
+    const rows = Object.keys(l.fields).filter(n => !['artificialkey', 'playerid', 'teamid'].includes(n))
+      .sort((a, b) => (LINK_LABELS[a] ? 0 : 1) - (LINK_LABELS[b] ? 0 : 1)).map(n => wideRow(d, n, LINK_LABELS[n] || n, null, null, 'RrqT', lk, l.i, d.linkrange, l.fields)).join('');
+    return `<p class="sub">${esc(l.team)} ${l.national ? '<small>сборная</small>' : ''}</p><div class="grid2">${rows}</div>`;
+  }).join('') || '<p class="note">Игрок не числится ни в одной команде.</p>';
+  const relId = fkey('RLC', pid, 'releaseclause');
+  const release = d.release === undefined
+    ? '<p class="note">Ищу отступные в памяти игры. После загрузки карьеры это занимает до минуты.</p>'
+    : `<div class="grid2">${row('Отступные, 0 = нет', cell('RLC', 0, k, 'releaseclause', d.release, [0, 2147483646]), '', 'wide' + (S.edited.has(relId) ? ' edited' : ''))}</div>`;
+  const contracts = d.contracts === undefined ? '<p class="note">Карьерные контракты видны, когда загружена карьера.</p>'
+    : release + (d.contracts.length ? '<p class="note">«Статус» показывает, что сделала игра. Трансферный и арендный лист игра хранит отдельно, поэтому правка статуса здесь игрока не выставит.</p>' + d.contracts.map(c => `<div class="grid2">${Object.keys(c.fields).filter(n => !['playerid'].includes(n)).sort((a, b) => (b === 'contract_status') - (a === 'contract_status'))
+      .map(n => wideRow(d, n, CONTRACT_LABELS[n] || n, n === 'contract_status' ? 'select' : null, CONTRACT_STATUS, 'DvsP', {playerid: pid}, c.i, d.contractrange, c.fields)).join('')}</div>`).join('')
+    : '<p class="note">У игрока нет карьерного контракта (такие записи есть только у игроков твоего клуба). Срок обычного контракта меняется в «Основном».</p>');
+  const all = Object.keys(f).sort().map(n => wideRow(d, n, n, typeof f[n] === 'string' ? 'text' : null)).join('');
+  const sections = [['main', 'Основное', `<div class="grid2">${main}</div>`],
+    ...GROUPS.map(([id, title, list]) => [id, title, `<div class="grid">${list.map(([n, l]) => attrRow(d, n, l)).join('')}</div>`]),
+    ...(d.playercareer ? [['pcar', 'Карьера игрока', renderProCareer(d)]] : []),
+    ['traits', 'Трейты', traits],
+    ['look', 'Внешность', `<p class="note">Значения ниже это номера из игры, картинок причёсок и лиц в файлах нет: меняй и смотри результат в игре. Если у игрока отсканированное лицо (первое поле = 1), игра берёт лицо и причёску из модели и коды не действуют. Поставь 0, и игра соберёт голову из кодов.</p><div class="grid2">${LOOK.map(([n, l]) => wideRow(d, n, l)).join('')}</div>`],
+    ['club', 'Клуб и сборная', links], ['contract', 'Контракт в карьере', contracts],
+    ['pins', `Закреплено${Object.keys(d.pins || {}).length ? ' · ' + Object.keys(d.pins).length : ''}`, renderPins(d)],
+    ['log', `Журнал${S.log.length ? ' · ' + S.log.length : ''}`, renderLog()],
+    ['all', 'Все поля', `<p class="note">Сырые значения таблицы players. Названия курсивом неизвестны: этих полей нет в мете FIFA 23.</p><div class="grid2">${all}</div>`]];
+  const ov = S.pending.get(fkey('CZUM', pid, 'overallrating'))?.value ?? f.overallrating;
+  const pt = S.pending.get(fkey('CZUM', pid, 'potential'))?.value ?? f.potential;
+  $('#panelEmpty').hidden = true;
+  const p = $('#player'); p.hidden = false;
+  p.innerHTML = `<div class="ph">
+      <div class="band"><h2 title="${esc(d.name)}">${esc(d.name)}</h2></div>
+      <p class="meta"><b>${esc(!club ? 'Без клуба' : club.fields.teamid === YOUTH_POOL ? 'Отчёт скаута' : club.team)}</b><span>${POS[f.preferredposition1] || '?'}</span><span>${esc(nat)}</span><span class="tt">ID ${pid}</span></p>
+      <div class="headline">
+        <label class="big"><span>Общий рейтинг</span>${cell('CZUM', d.i, k, 'overallrating', f.overallrating, d.range.overallrating, null, null, band(ov))}</label>
+        <label class="big"><span>Потенциал</span>${cell('CZUM', d.i, k, 'potential', f.potential, d.range.potential, null, null, band(pt))}</label>
+        <div class="big"><span>Возраст</span><span class="agebox">${d.age}</span></div>
+      </div>
+      <p class="note ovrnote">Общий рейтинг хранится отдельно и не пересчитывается от атрибутов: после прокачки атрибутов поменяй и его.</p></div>
+    <nav class="jump" aria-label="Разделы">${sections.map(([id, t]) => `<a href="#s-${id}">${esc(t)}</a>`).join('')}</nav>
+    <div class="sections">${sections.map(([id, t, body]) => `<section class="sec" id="s-${id}"><h3>${esc(t)}</h3>${body}</section>`).join('')}</div>`;
+  updateCommit();
+}
+function plural(n, a, b, c) { n = Math.abs(n) % 100; const m = n % 10; return n > 10 && n < 20 ? c : m === 1 ? a : m > 1 && m < 5 ? b : c; }
+function renderLog() {
+  if (!S.log.length) return '<p class="note">Записанные в игру правки появятся здесь со старым значением и кнопкой «Вернуть».</p>';
+  return `<div class="log">${S.log.map((e, n) => `<div class="${e.undone ? 'undone' : ''}"><span class="what"><b>${esc(e.pname)}</b> · ${esc(e.label)}</span>
+    <span class="ch"><s>${esc(e.old)}</s> → <b>${esc(e.now)}</b></span>
+    ${e.undone ? '<span class="stamp">ОТМЕНЕНО</span>' : `<button class="linkbtn" type="button" data-undo="${n}">Вернуть</button>`}</div>`).join('')}</div>`;
+}
+
+/* ---------- editing ---------- */
+function labelOf(el) { return el.closest('label')?.querySelector('span')?.textContent || el.dataset.f; }
+function readValue(el) {
+  if (el.dataset.kind === 'date') return el.value ? isoToDay(el.value) : null;
+  if (el.dataset.kind === 'text') return el.value;
+  return el.value === '' ? null : Number(el.value);
+}
+function stage(el) {
+  const v = readValue(el), old = el.dataset.kind === 'text' ? el.dataset.old : Number(el.dataset.old);
+  const key = JSON.parse(el.dataset.k);
+  const id = fkey(el.dataset.t, Object.values(key)[0], el.dataset.f);
+  if (v === null || v === old || Number.isNaN(v)) S.pending.delete(id);
+  else S.pending.set(id, {table: el.dataset.t, i: +el.dataset.i, key, field: el.dataset.f, value: v, old, label: labelOf(el), pname: S.cur.d.name, pid: S.cur.id});
+  el.classList.toggle('pending', S.pending.has(id));
+  const bar = el.closest('.row')?.querySelector('.bar');
+  if (bar && v !== null) { bar.className = `bar ${band(v)}`; bar.firstElementChild.style.width = `${Math.max(0, Math.min(99, v)) / 99 * 100}%`; }
+  updateCommit();
+}
+function stageTrait(box) {
+  const wrap = box.closest('[data-trait]');
+  let v = 0; wrap.querySelectorAll('input').forEach(c => { if (c.checked) v += 2 ** +c.dataset.bit; });
+  const d = S.cur.d, f = wrap.dataset.trait, old = +wrap.dataset.old;
+  const id = fkey('CZUM', d.fields.playerid, f);
+  if (v === old) S.pending.delete(id);
+  else S.pending.set(id, {table: 'CZUM', i: d.i, key: {playerid: d.fields.playerid}, field: f, value: v, old, label: f === 'trait1' ? 'Трейты' : 'Скрытые трейты', pname: d.name, pid: S.cur.id});
+  updateCommit();
+}
+function updateCommit() {
+  const n = S.pending.size;
+  $('#commit').hidden = !n;
+  $('#pendCount').textContent = n;
+  const m = $('#pendMsg'); m.classList.remove('err');
+  m.textContent = n ? `${plural(n, 'правка не записана', 'правки не записаны', 'правок не записано')}: ${[...S.pending.values()].map(p => p.label).join(', ')}` : '';
+}
+async function commit() {
+  if (!S.pending.size) return;
+  const btn = $('#write'); btn.disabled = true;
+  const items = [...S.pending.entries()];
+  let permanent = 0;
+  for (const [id, p] of items) {
+    try {
+      const r = await api('/api/set', {table: p.table, i: p.i, key: p.key, field: p.field, value: p.value});
+      S.pending.delete(id); S.edited.add(id);
+      S.log.unshift({...p, now: r.value, i: r.i});
+      if (r.permanent) permanent++;
+    } catch (e) {
+      const m = $('#pendMsg'); m.textContent = `${p.label}: ${e.message}`; m.classList.add('err');
+      btn.disabled = false; return;
+    }
+  }
+  btn.disabled = false;
+  if (permanent) toast('Записано и в копию карьеры игрока: игра больше не откатит эти значения. Сохрани карьеру, чтобы они попали в сейв.', 'info');
+  await reloadCur();
+  loadList();
+}
+const FIELD_LABELS = Object.fromEntries([...GROUPS.flatMap(g => g[2]), ['overallrating', 'Общий рейтинг'], ['potential', 'Потенциал'],
+  ['birthdate', 'Дата рождения'], ['height', 'Рост'], ['weight', 'Вес'], ['contractvaliduntil', 'Контракт до'], ['trait1', 'Трейты'], ['trait2', 'Скрытые трейты']]);
+function renderPins(d) {
+  const pins = Object.entries(d.pins || {});
+  const note = '<p class="note">Правки атрибутов закрепляются сами. Если игра после матча вернёт старое значение (так она делает с твоим игроком в карьере игрока), редактор восстановит его за пару секунд, пока он запущен.</p>';
+  if (!pins.length) return note;
+  return note + `<div class="log">${pins.map(([f, v]) => `<div><span class="what">${esc(FIELD_LABELS[f] || f)}</span>
+    <span class="ch"><b>${esc(v)}</b></span><button class="linkbtn" type="button" data-unpin="${esc(f)}">Открепить</button></div>`).join('')}</div>`;
+}
+async function unpin(field) {
+  try { await api('/api/unpin', {playerid: S.cur.id, field}); await reloadCur(); }
+  catch (err) { toast(`Не удалось открепить: ${err.message}`); }
+}
+async function undo(n) {
+  const e = S.log[n];
+  try {
+    await api('/api/set', {table: e.table, i: e.i, key: e.key, field: e.field, value: e.old});
+    if (e.table === 'CZUM') await api('/api/unpin', {playerid: e.key.playerid, field: e.field});
+    e.undone = true;
+    if (!S.log.some(x => !x.undone && fkey(x.table, Object.values(x.key)[0], x.field) === fkey(e.table, Object.values(e.key)[0], e.field))) S.edited.delete(fkey(e.table, Object.values(e.key)[0], e.field));
+    await reloadCur();
+    loadList();
+  } catch (err) { toast(`Не удалось вернуть: ${err.message}`); }
+}
+
+/* ---------- wiring ---------- */
+const panel = $('#panel');
+panel.addEventListener('input', e => {
+  const el = e.target;
+  if (el.matches('[data-color]')) return stageColor(el);
+  if (el.matches('[data-trait] input')) return stageTrait(el);
+  if (el.matches('[data-f]')) stage(el);
+});
+panel.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.matches('[data-f], [data-trait] input')) { e.preventDefault(); commit(); }
+  if (e.key === 'Escape' && e.target.matches('[data-f]')) {
+    const el = e.target;
+    if (el.dataset.kind === 'date') el.value = dayToIso(+el.dataset.old); else el.value = el.dataset.old;
+    stage(el);
+  }
+});
+panel.addEventListener('change', async e => {
+  const s = e.target.closest('[data-scout]'); if (!s) return;
+  try {
+    await api('/api/set', {table: 'zlrC', i: 0, key: {scoutid: +s.dataset.scout}, field: s.dataset.sf, value: +s.value});
+    toast('Записано в игру: новые звёзды скаута видны сразу.', 'info');
+  } catch (err) { toast(err.message); loadYouth(); }
+});
+panel.addEventListener('click', e => {
+  const u = e.target.closest('[data-undo]'); if (u) undo(+u.dataset.undo);
+  const p = e.target.closest('[data-unpin]'); if (p) unpin(p.dataset.unpin);
+});
+$('#write').addEventListener('click', commit);
+$('#discard').addEventListener('click', () => { S.pending.clear(); S.cur.kind === 'team' ? renderTeam(S.cur.d) : renderPlayer(S.cur.d); });
+
+$('#rows').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr) { tr.focus(); openPlayer(+tr.dataset.i, +tr.dataset.id); } });
+$('#rows').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  const tr = e.target.closest('tr'), nx = e.key === 'ArrowDown' ? tr?.nextElementSibling : tr?.previousElementSibling;
+  if (nx) { nx.focus(); openPlayer(+nx.dataset.i, +nx.dataset.id); }
+});
+document.querySelectorAll('#playerList thead th').forEach(th => th.querySelector('button').addEventListener('click', () => {
+  const k = th.dataset.sort;
+  S.desc = S.sort === k ? !S.desc : !['name', 'club', 'pos'].includes(k);
+  S.sort = k; loadList();
+}));
+document.querySelectorAll('.key:not(.tkey)').forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+document.querySelectorAll('.tkey').forEach(b => b.addEventListener('click', () => {
+  S.tpreset = b.dataset.tpreset;
+  document.querySelectorAll('.tkey').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderTeams();
+}));
+document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+$('#tq').addEventListener('input', renderTeams);
+$('#tleague').addEventListener('change', renderTeams);
+$('#trows').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr) { tr.focus(); openTeam(+tr.dataset.id); } });
+$('#trows').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  const tr = e.target.closest('tr'), nx = e.key === 'ArrowDown' ? tr?.nextElementSibling : tr?.previousElementSibling;
+  if (nx) { nx.focus(); openTeam(+nx.dataset.id); }
+});
+let qt;
+const custom = () => { S.preset = null; syncKeys(); };
+$('#q').addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(loadList, 180); });
+for (const id of ['agemax', 'potmin', 'contract', 'pos']) $('#' + id).addEventListener('change', () => { custom(); loadList(); });
+$('#club').addEventListener('change', () => { custom(); loadList(); });
+$('#clear').addEventListener('click', () => { $('#q').value = ''; applyPreset('all'); });
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !e.target.matches('input, select, textarea')) { e.preventDefault(); $('#q').focus(); }
+  if (e.key === 'ArrowDown' && e.target === $('#q')) { e.preventDefault(); const tr = $('#rows tr'); if (tr) { tr.focus(); openPlayer(+tr.dataset.i, +tr.dataset.id); } }
+});
+function showTimed(state) {
+  const b = $('#timed');
+  b.setAttribute('aria-checked', String(state === 'on'));
+  b.disabled = state !== 'on' && state !== 'off';
+  $('#timedState').textContent = state === 'on' ? 'всегда зелёный' : state === 'off' ? 'выкл' : 'недоступно';
+}
+$('#timed').addEventListener('click', async () => {
+  const b = $('#timed'), on = b.getAttribute('aria-checked') !== 'true';
+  S.timedBusy = true; b.disabled = true;
+  try { showTimed((await api('/api/timed', {on})).state); }
+  catch (e) { toast(`Тайм-финишинг: ${e.message}`); b.disabled = false; }
+  finally { S.timedBusy = false; }
+});
+function showSwitch(id, state) {
+  const b = $('#' + id);
+  b.setAttribute('aria-checked', String(state === 'on'));
+  b.disabled = state !== 'on' && state !== 'off';
+  $(`#${id}State`).textContent = state === 'on' ? 'вкл' : state === 'off' ? 'выкл' : 'недоступно';
+}
+$('#exact').addEventListener('click', async () => {
+  const b = $('#exact'), on = b.getAttribute('aria-checked') !== 'true';
+  S.exactBusy = true; b.disabled = true;
+  try { showSwitch('exact', (await api('/api/exact', {on})).state); }
+  catch (e) { toast(`Точные OVR и POT: ${e.message}`); b.disabled = false; }
+  finally { S.exactBusy = false; }
+});
+const showReveal = state => showSwitch('reveal', state);
+$('#reveal').addEventListener('click', async () => {
+  const b = $('#reveal'), on = b.getAttribute('aria-checked') !== 'true';
+  S.revealBusy = true; b.disabled = true;
+  try {
+    showReveal((await api('/api/reveal', {on})).state);
+    if (on) toast('Включено. Если карьера уже загружена и игроки на рынке всё ещё скрыты, перезагрузи карьеру.', 'info');
+  } catch (e) { toast(`Без скаутинга: ${e.message}`); b.disabled = false; }
+  finally { S.revealBusy = false; }
+});
+$('#reattach').addEventListener('click', async () => { S.careerKey = ''; await api('/api/attach', {}); $('#state').dataset.s = 'scan'; });
+function setTheme(t) { document.documentElement.dataset.theme = t; $('#themeLbl').textContent = t === 'dark' ? 'Светлая тема' : 'Тёмная тема'; localStorage.setItem('theme', t); }
+$('#theme').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+setTheme(localStorage.getItem('theme') || 'dark');
+document.body.dataset.mode = 'players';
+window.addEventListener('beforeunload', e => { if (S.pending.size) e.preventDefault(); });
+poll();
+</script>
+</body>
+</html>
