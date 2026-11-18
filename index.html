@@ -216,7 +216,9 @@ input[type=number]::-webkit-inner-spin-button { display: none; }
 [data-theme="light"] .modes button[aria-pressed="true"] { background: var(--key-yellow); color: var(--on-key); }
 body[data-mode="players"] .tkey, body[data-mode="teams"] .key:not(.tkey), body[data-mode="youth"] .key { display: none; }
 .filters[hidden] { display: none; }
-#reveal, #exact { margin-left: 0; }
+#reveal, #exact, #sima, #endhalf { margin-left: 0; }
+#endhalf[data-armed="true"] { border-color: var(--yellow); }
+#endhalf[data-armed="true"] b { background: var(--yellow); color: var(--bg); }
 #youthForm .tswitch { height: 34px; font-size: 16px; }
 .scouts { display: grid; gap: 8px; margin-top: 16px; }
 .scouts .row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: end; }
@@ -293,6 +295,10 @@ body[data-mode="players"] .tkey, body[data-mode="teams"] .key:not(.tkey), body[d
     title="Любой удар с тайм-финишингом и без второго нажатия игра засчитывает как идеальный (зелёный). Редактор помнит настройку и включает её снова после перезапуска игры.">Тайм-финишинг <b id="timedState">выкл</b></button>
   <button class="tswitch" id="reveal" type="button" role="switch" aria-checked="false" disabled
     title="На трансферном рынке игра сразу показывает всё о любом игроке: рейтинг, потенциал, стоимость и зарплату, без отчёта скаута. Включай до загрузки карьеры или перезагрузи её после включения. Редактор помнит настройку.">Без скаутинга <b id="revealState">выкл</b></button>
+  <button class="tswitch" id="sima" data-detour="sima" type="button" role="switch" aria-checked="false" disabled
+    title="Симуляция тренировки всегда получает оценку A, как идеально сыгранная тренировка. Тренировки можно не играть: в разделе развития игроков жми «Симулировать».">Тренировки на A <b id="simaState">выкл</b></button>
+  <button class="tswitch" id="endhalf" type="button" disabled
+    title="Свисток на перерыв или конец матча с текущим счётом. Нажми, вернись в игру и сними паузу: тайм закончится в ту же секунду. Во втором тайме это конец матча.">Закончить тайм <b id="endhalfState">—</b></button>
   <span class="hint"><kbd>/</kbd> поиск · <kbd>↑</kbd><kbd>↓</kbd> по списку · <kbd>Enter</kbd> записать</span>
 </nav>
 
@@ -315,7 +321,7 @@ body[data-mode="players"] .tkey, body[data-mode="teams"] .key:not(.tkey), body[d
       <label class="field w-num"><span>Рост до, см</span><input class="inp tt" id="yhmax" type="number" min="150" max="210" inputmode="numeric"></label>
       <button class="tswitch" id="yon" type="button" role="switch" aria-checked="false" disabled
         title="Каждого юниора из отчётов скаутов редактор поднимает до этих значений: рейтинг вместе с атрибутами, потенциал, рост. Пустое поле не трогает параметр.">Подгонять юниоров <b id="yonState">выкл</b></button>
-      <button class="tswitch" id="exact" type="button" role="switch" aria-checked="false" disabled
+      <button class="tswitch" id="exact" data-detour="exact" type="button" role="switch" aria-checked="false" disabled
         title="В отчётах скаутов у новых юниоров будут точные OVR и POT вместо вилки. Действует на юниоров, которых скаут найдёт после включения. Редактор помнит настройку.">Точные OVR и POT <b id="exactState">выкл</b></button>
     </form>
     <div class="tablewrap" id="tablewrap">
@@ -430,7 +436,12 @@ async function poll() {
   $('#reattach').disabled = s.state === 'scan';
   if (!S.timedBusy) showTimed(s.state === 'ready' ? s.timed : 'unavailable');
   if (!S.revealBusy) showReveal(s.state === 'ready' ? s.reveal : 'unavailable');
-  if (!S.exactBusy) showSwitch('exact', s.state === 'ready' ? s.exact : 'unavailable');
+  for (const b of document.querySelectorAll('[data-detour]'))
+    if (!b.dataset.busy) showSwitch(b.id, s.state === 'ready' ? s.detours?.[b.dataset.detour] || 'unavailable' : 'unavailable');
+  const eh = $('#endhalf'), armed = s.state === 'ready' && s.armed;
+  eh.disabled = !(s.state === 'ready' && s.clock);
+  eh.dataset.armed = String(armed);
+  $('#endhalfState').textContent = armed ? 'ждёт матч · отменить' : s.clock ? 'готово' : 'недоступно';
   const key = s.state === 'ready' ? `${s.pid}|${c ? c.clubid + c.date : ''}|${s.players}` : '';
   if (s.state === 'ready' && key !== S.careerKey) {
     const fresh = !S.careerKey || S.careerKey.split('|')[0] !== String(s.pid);
@@ -967,14 +978,23 @@ function showSwitch(id, state) {
   b.disabled = state !== 'on' && state !== 'off';
   $(`#${id}State`).textContent = state === 'on' ? 'вкл' : state === 'off' ? 'выкл' : 'недоступно';
 }
-$('#exact').addEventListener('click', async () => {
-  const b = $('#exact'), on = b.getAttribute('aria-checked') !== 'true';
-  S.exactBusy = true; b.disabled = true;
-  try { showSwitch('exact', (await api('/api/exact', {on})).state); }
-  catch (e) { toast(`Точные OVR и POT: ${e.message}`); b.disabled = false; }
-  finally { S.exactBusy = false; }
-});
+document.querySelectorAll('[data-detour]').forEach(b => b.addEventListener('click', async () => {
+  const on = b.getAttribute('aria-checked') !== 'true';
+  b.dataset.busy = '1'; b.disabled = true;
+  try { showSwitch(b.id, (await api('/api/detour', {name: b.dataset.detour, on})).state); }
+  catch (e) { toast(`${b.firstChild.textContent.trim()}: ${e.message}`); b.disabled = false; }
+  finally { delete b.dataset.busy; }
+}));
 const showReveal = state => showSwitch('reveal', state);
+$('#endhalf').addEventListener('click', async () => {
+  const b = $('#endhalf'), cancel = b.dataset.armed === 'true';
+  try {
+    await api('/api/endhalf', {cancel});
+    b.dataset.armed = String(!cancel);
+    $('#endhalfState').textContent = cancel ? 'готово' : 'ждёт матч · отменить';
+    if (!cancel) toast('Вернись в игру и сними паузу: тайм закончится сразу со счётом на табло. Передумал: нажми кнопку ещё раз.', 'info');
+  } catch (e) { toast(`Закончить тайм: ${e.message}`); }
+});
 $('#reveal').addEventListener('click', async () => {
   const b = $('#reveal'), on = b.getAttribute('aria-checked') !== 'true';
   S.revealBusy = true; b.disabled = true;

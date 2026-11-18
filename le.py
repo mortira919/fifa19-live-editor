@@ -127,11 +127,25 @@ def find_code(p, pat):
     return hits[0] if len(hits) == 1 else None
 
 
-# ---------------------------------------------------------------- exact OVR/POT for scouted youth
-# Aranaktu's "Reveal ovr and pot": the loop that stores a prospect's potential variances (6 values, two arrays 0x18
-# apart) gets a detour that stores 0 instead, so scout reports show exact OVR and POT instead of ranges.
-YA_ORIG = bytes.fromhex('8907ffc34883c704')                        # mov [rdi],eax; inc ebx; add rdi,4
-YA_AOB = re.compile(b'\xf0\xff\x05....(?:' + re.escape(YA_ORIG) + b'|\xe9....\x90\x90\x90)\x83\xfb\x06', re.S)
+# ---------------------------------------------------------------- detours from Aranaktu's FIFA 19 CM table
+# Each runs a few extra instructions in front of the original ones: (signature, offset of the site in it,
+# original bytes at the site, instructions to prepend). The signature matches both the original and the hooked site.
+def _sig(before_re, orig):
+    hooked = b'\xe9....' + b'\x90' * (len(orig) - 5)
+    return re.compile(before_re + b'(?:' + re.escape(orig) + b'|' + hooked + b')', re.S)
+
+
+_YA = bytes.fromhex('8907ffc34883c704')     # mov [rdi],eax; inc ebx; add rdi,4
+_SIMA = bytes.fromhex('448bf84c8d45c0')     # mov r15d,eax; lea r8,[rbp-40]
+DETOURS = {
+    # "Reveal ovr and pot": a scouted prospect's potential variances (two arrays 0x18 apart) are stored as 0,
+    # so youth reports show exact OVR and POT instead of ranges
+    'exact': (re.compile(b'\xf0\xff\x05....(?:' + re.escape(_YA) + b'|\xe9....\x90\x90\x90)\x83\xfb\x06', re.S), 7, _YA,
+              bytes.fromhex('31c0' '8947e8')),                    # xor eax,eax; mov [rdi-18],eax
+    # "Training sim - A": the simulated training grade is forced to 0, which is A
+    'sima': (_sig(re.escape(bytes.fromhex('488b8bc0000000')) + b'\xe8....', _SIMA), 12, _SIMA,
+             bytes.fromhex('b800000000')),                         # mov eax,0
+}
 k32.VirtualAllocEx.restype = C.c_void_p
 k32.VirtualAllocEx.argtypes = [W.HANDLE, C.c_void_p, C.c_size_t, W.DWORD, W.DWORD]
 
@@ -149,19 +163,52 @@ def alloc_near(p, site, size=0x1000):
     raise RuntimeError('Не нашёл свободную память рядом с кодом игры')
 
 
-def ya_state(p, site):
+def detour_state(p, site):
     return 'unavailable' if site is None else 'on' if p.read(site, 1) == b'\xe9' else 'off'
 
 
-def ya_set(p, site, on):
+def detour_set(p, site, orig, prefix, on):
+    """Hook: jmp to a cave running prefix + the original instructions, then jmp back. Unhook: restore orig."""
     if not on:
-        return patch_code(p, site, YA_ORIG)
+        return patch_code(p, site, orig)
     cave = alloc_near(p, site)
-    back = site + len(YA_ORIG)
-    code = bytes.fromhex('31c0' '8947e8' '8907' 'ffc3' '4883c704')  # xor eax,eax; mov [rdi-18],eax; mov [rdi],eax; ...
-    code += b'\xe9' + struct.pack('<i', back - (cave + len(code) + 5))
+    code = prefix + orig
+    code += b'\xe9' + struct.pack('<i', site + len(orig) - (cave + len(code) + 5))
     p.write(cave, code)
-    patch_code(p, site, b'\xe9' + struct.pack('<i', cave - (site + 5)) + b'\x90' * 3)
+    patch_code(p, site, b'\xe9' + struct.pack('<i', cave - (site + 5)) + b'\x90' * (len(orig) - 5))
+
+
+def detour_selftest():
+    """The signatures must accept both the original and the hooked site."""
+    for name, (sig, off, orig, prefix) in DETOURS.items():
+        for site in (orig, b'\xe9\x01\x02\x03\x04' + b'\x90' * (len(orig) - 5)):
+            blob = {'exact': b'\xf0\xff\x05\0\0\0\0' + site + b'\x83\xfb\x06',
+                    'sima': bytes.fromhex('488b8bc0000000') + b'\xe8\0\0\0\0' + site}[name]
+            m = sig.search(b'xx' + blob)
+            assert m and m.start() == 2 and blob[off:off + len(orig)] == site, name
+
+
+# ---------------------------------------------------------------- end the current half
+# Aranaktu's "Match Timer": this code reads the match clock object (rcx) every frame of a match. A detour stores rcx
+# in a slot we can read; setting the clock ([rcx+0x50]) to 25000 makes the referee blow for half or full time.
+MT_ORIG = bytes.fromhex('8b4150894610')                            # mov eax,[rcx+50]; mov [rsi+10],eax
+MT_AOB = re.compile(re.escape(bytes.fromhex('488b8b00090000')) + b'(?:' + re.escape(MT_ORIG) + b'|\xe9....\x90)'
+                    + re.escape(bytes.fromhex('8b4154894614')), re.S)
+MT_END = 25000
+
+
+def mt_hook(p, site):
+    """Install the clock detour (once per game process); returns the address of the slot that receives rcx."""
+    if p.read(site, 1) == b'\xe9':  # already hooked by an earlier editor run: follow the jmp to its cave
+        return site + 5 + struct.unpack('<i', p.read(site + 1, 4))[0] + 0x100
+    cave = alloc_near(p, site)
+    slot = cave + 0x100
+    code = b'\x48\x89\x0d' + struct.pack('<i', slot - (cave + 7)) + MT_ORIG    # mov [slot],rcx; original code
+    code += b'\xe9' + struct.pack('<i', site + len(MT_ORIG) - (cave + len(code) + 5))
+    p.write(slot, bytes(8))
+    p.write(cave, code)
+    patch_code(p, site, b'\xe9' + struct.pack('<i', cave - (site + 5)) + b'\x90')
+    return slot
 
 
 def gtn_state(p, site):
@@ -339,7 +386,9 @@ class Game:
         self.restored = 0
         self.pro_copy = {}
         self.rlc, self.rlc_try, self.rlc_car = None, 0.0, None
-        self.gtn = self.ya = None
+        self.gtn = self.mt = None
+        self.sites = {}
+        self.end_armed = 0.0
 
     def attach(self):
         self.last_try = time.time()
@@ -357,10 +406,13 @@ class Game:
                 self.gtn = find_code(p, GTN_AOB)
                 if load_cache().get('reveal') and gtn_state(p, self.gtn) == 'off':
                     patch_code(p, self.gtn + 2, b'\xeb')
-                ya = find_code(p, YA_AOB)
-                self.ya = ya + 7 if ya is not None else None
-                if load_cache().get('exact') and ya_state(p, self.ya) == 'off':
-                    ya_set(p, self.ya, True)
+                for name, (sig, off, orig, prefix) in DETOURS.items():
+                    hit = find_code(p, sig)
+                    self.sites[name] = hit + off if hit is not None else None
+                    if load_cache().get(name) and detour_state(p, self.sites[name]) == 'off':
+                        detour_set(p, self.sites[name], orig, prefix, True)
+                mt = find_code(p, MT_AOB)
+                self.mt = mt_hook(p, mt + 7) if mt is not None else None
                 objs = self._scan(p)
                 self.t = {s: Table(p, o) for s, o in objs.items()}
                 self.names = huffman_names(self.t['BGwe']) if 'BGwe' in self.t else {}
@@ -385,15 +437,52 @@ class Game:
             save_cache(reveal=bool(on))
             return {'state': gtn_state(self.p, self.gtn)}
 
-    def exact(self, on):
+    def end_half(self, cancel=False):
+        """Arm: the next match frame the game runs (after the user returns to it and unpauses) ends the half."""
+        if cancel:
+            self.end_armed = 0.0
+            return {'ok': True}
         with self.lock:
             self.ok()
-            if self.ya is None:
+            if self.mt is None:
+                raise RuntimeError('Не нашёл таймер матча в коде FIFA19.exe: эта версия игры не поддерживается')
+            self.p.write(self.mt, bytes(8))  # a stale clock pointer from an earlier match must not be used
+            self.end_armed = time.time()
+        threading.Thread(target=self._end_when_live, daemon=True).start()
+        return {'ok': True}
+
+    def _end_when_live(self):
+        armed, seen = self.end_armed, None
+        while self.end_armed == armed and time.time() - armed < 180:
+            time.sleep(0.2)
+            with self.lock:
+                if not self.p or not self.mt:
+                    return
+                clock = struct.unpack('<Q', self.p.read(self.mt, 8).ljust(8, b'\0'))[0]
+                if not clock:
+                    continue
+                t = struct.unpack('<I', self.p.read(clock + 0x50, 4).ljust(4, b'\0'))[0]
+                # the game also runs this code in menus, with a still clock: write only once it ticks (match on)
+                if seen is not None and t != seen and t < MT_END:
+                    self.p.write(clock + 0x50, struct.pack('<I', MT_END))
+                    self.end_armed = 0.0
+                    return
+                seen = t
+        if self.end_armed == armed:
+            self.end_armed = 0.0
+
+    def detour(self, name, on):
+        with self.lock:
+            self.ok()
+            if name not in DETOURS:
+                raise ValueError('Нет такого патча')
+            site = self.sites.get(name)
+            if site is None:
                 raise RuntimeError('Не нашёл нужное место в коде FIFA19.exe: эта версия игры не поддерживается')
-            if (ya_state(self.p, self.ya) == 'on') != on:
-                ya_set(self.p, self.ya, on)
-            save_cache(exact=bool(on))
-            return {'state': ya_state(self.p, self.ya)}
+            if (detour_state(self.p, site) == 'on') != on:
+                detour_set(self.p, site, DETOURS[name][2], DETOURS[name][3], on)
+            save_cache(**{name: bool(on)})
+            return {'state': detour_state(self.p, site)}
 
     def _scan(self, p):
         cache = load_cache()
@@ -595,7 +684,9 @@ class Game:
                 try:
                     self.ok()
                     out.update(pid=self.p.pid, players=self.t['CZUM'].state()[2], career=self.career(), timed=tf_state(self.p), restored=self.restored,
-                               rlc=self._rlc() is not None, reveal=gtn_state(self.p, self.gtn), exact=ya_state(self.p, self.ya))
+                               rlc=self._rlc() is not None, reveal=gtn_state(self.p, self.gtn), 
+                               detours={n: detour_state(self.p, s) for n, s in self.sites.items()},
+                               clock=self.mt is not None, armed=bool(self.end_armed))
                 except Exception as e:
                     out.update(state=self.state, msg=str(e))
         return out
@@ -898,9 +989,12 @@ class H(BaseHTTPRequestHandler):
             if method == 'POST' and u.path == '/api/unpin':
                 b = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))))
                 return self.send(200, GAME.unpin(int(b['playerid']), str(b['field'])))
-            if method == 'POST' and u.path == '/api/exact':
+            if method == 'POST' and u.path == '/api/endhalf':
+                b = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
+                return self.send(200, GAME.end_half(bool(b.get('cancel'))))
+            if method == 'POST' and u.path == '/api/detour':
                 b = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))))
-                return self.send(200, GAME.exact(bool(b['on'])))
+                return self.send(200, GAME.detour(str(b['name']), bool(b['on'])))
             if method == 'POST' and u.path == '/api/reveal':
                 b = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))))
                 return self.send(200, GAME.reveal(bool(b['on'])))
@@ -925,6 +1019,9 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    if '--selftest' in sys.argv:
+        detour_selftest()
+        sys.exit(print('ok'))
     # from Steam: pythonw le.py --game "D:\...\FIFA19.exe" starts the game and the editor together, without a window
     game = sys.argv[sys.argv.index('--game') + 1] if '--game' in sys.argv else None
     if game:
